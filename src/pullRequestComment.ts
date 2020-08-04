@@ -63,7 +63,7 @@ function commentContent(signed: boolean, committerMap: CommitterMap): string {
   if (committerMap && committerMap.unknown && committerMap.unknown.length > 0) {
     let seem = committerMap.unknown.length > 1 ? "seem" : "seems"
     let committerNames = committerMap.unknown.map((committer) => committer.name)
-    text += `<hr/>**${committerMap.unknown.join(
+    text += `<hr/>**${committerNames.join(
       ", "
     )}** ${seem} not to be a GitHub user.`
     text +=
