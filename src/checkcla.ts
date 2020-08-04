@@ -1,26 +1,29 @@
-import { checkAllowList } from './checkAllowList'
-import getCommitters from './graphql'
-import octokit from './octokit'
-import prComment from './pullRequestComment'
-import { CommitterMap, CommittersDetails, ReactedCommitterMap } from './interfaces'
-import { context } from '@actions/github'
+import { checkAllowList } from "./checkAllowList"
+import getCommitters from "./graphql"
+import octokit from "./octokit"
+import prComment from "./pullRequestComment"
+import {
+  CommitterMap,
+  CommittersDetails,
+  ReactedCommitterMap,
+} from "./interfaces"
+import { context } from "@actions/github"
 
-import * as _ from 'lodash'
-import * as core from '@actions/core'
-
+import * as _ from "lodash"
+import * as core from "@actions/core"
 
 export async function getclas(pullRequestNo: number) {
   let committerMap = {} as CommitterMap
 
   let signed: boolean = false
   //getting the path of the cla from the user
-  let pathToClaSignatures: string = core.getInput('path-to-signatures')
-  let branch: string = core.getInput('branch')
-  if (!pathToClaSignatures || pathToClaSignatures == '') {
+  let pathToClaSignatures: string = core.getInput("path-to-signatures")
+  let branch: string = core.getInput("branch")
+  if (!pathToClaSignatures || pathToClaSignatures == "") {
     pathToClaSignatures = "signatures/cla.json" // default path for storing the signatures
   }
-  if (!branch || branch == '') {
-    branch = 'master'
+  if (!branch || branch == "") {
+    branch = "master"
   }
   let result, clas, sha
   let committers = (await getCommitters()) as CommittersDetails[]
@@ -31,14 +34,16 @@ export async function getclas(pullRequestNo: number) {
       owner: context.repo.owner,
       repo: context.repo.repo,
       path: pathToClaSignatures,
-      ref: branch
+      ref: branch,
     })
     sha = result.data.sha
   } catch (error) {
+    console.error("Failed to get contents of the repo")
+    console.error(error)
     if (error.status === 404) {
       committerMap.notSigned = committers
       committerMap.signed = []
-      committers.map(committer => {
+      committers.map((committer) => {
         if (!committer.id) {
           committerMap.unknown!.push(committer)
         }
@@ -46,31 +51,54 @@ export async function getclas(pullRequestNo: number) {
 
       const initialContent = { signedContributors: [] }
       const initialContentString = JSON.stringify(initialContent, null, 2)
-      const initialContentBinary = Buffer.from(initialContentString).toString('base64')
+      const initialContentBinary = Buffer.from(initialContentString).toString(
+        "base64"
+      )
 
       Promise.all([
         createFile(pathToClaSignatures, initialContentBinary, branch),
         prComment(signed, committerMap, committers, pullRequestNo),
       ])
-        .then(() => core.setFailed(`Committers of pull request ${context.issue.number} have to sign the CLA`))
-        .catch(error => core.setFailed(
-          `Error occurred when creating the signed contributors file: ${error.message || error}. Make sure the branch where signatures are stored is NOT protected.`
-        ))
+        .then(() =>
+          core.setFailed(
+            `Committers of pull request ${context.issue.number} have to sign the CLA`
+          )
+        )
+        .catch((error) =>
+          core.setFailed(
+            `Error occurred when creating the signed contributors file: ${
+              error.message || error
+            }. Make sure the branch where signatures are stored is NOT protected.`
+          )
+        )
     } else {
-      core.setFailed(`Could not retrieve repository contents: ${error.message}. Status: ${error.status || 'unknown'}`)
+      core.setFailed(
+        `Could not retrieve repository contents: ${error.message}. Status: ${
+          error.status || "unknown"
+        }`
+      )
     }
     return
   }
-  clas = Buffer.from(result.data.content, 'base64').toString()
+  clas = Buffer.from(result.data.content, "base64").toString()
   clas = JSON.parse(clas)
   committerMap = prepareCommiterMap(committers, clas) as CommitterMap
 
   // TODO NULL check
-  if (committerMap && committerMap.notSigned && committerMap.notSigned.length === 0) {
+  if (
+    committerMap &&
+    committerMap.notSigned &&
+    committerMap.notSigned.length === 0
+  ) {
     signed = true
   }
   try {
-    const reactedCommitters: ReactedCommitterMap = (await prComment(signed, committerMap, committers, pullRequestNo)) as ReactedCommitterMap
+    const reactedCommitters: ReactedCommitterMap = (await prComment(
+      signed,
+      committerMap,
+      committers,
+      pullRequestNo
+    )) as ReactedCommitterMap
     if (signed) {
       core.info(`All committers have signed the CLA`)
       return
@@ -81,7 +109,13 @@ export async function getclas(pullRequestNo: number) {
         let contentString = JSON.stringify(clas, null, 2)
         let contentBinary = Buffer.from(contentString).toString("base64")
         /* pushing the recently signed  contributors to the CLA Json File */
-        await updateFile(pathToClaSignatures, sha, contentBinary, branch, pullRequestNo)
+        await updateFile(
+          pathToClaSignatures,
+          sha,
+          contentBinary,
+          branch,
+          pullRequestNo
+        )
       }
       if (reactedCommitters.allSignedFlag) {
         core.info(`All committers have signed the CLA`)
@@ -90,11 +124,16 @@ export async function getclas(pullRequestNo: number) {
     }
 
     /* return when there are no unsigned committers */
-    if (committerMap.notSigned === undefined || committerMap.notSigned.length === 0) {
+    if (
+      committerMap.notSigned === undefined ||
+      committerMap.notSigned.length === 0
+    ) {
       core.info(`All committers have signed the CLA`)
       return
     } else {
-      core.setFailed(`committers of Pull Request number ${context.issue.number} have to sign the CLA`)
+      core.setFailed(
+        `committers of Pull Request number ${context.issue.number} have to sign the CLA`
+      )
     }
   } catch (err) {
     core.setFailed(`Could not update the JSON file: ${err.message}`)
@@ -102,17 +141,20 @@ export async function getclas(pullRequestNo: number) {
   return clas
 }
 
-function prepareCommiterMap(committers: CommittersDetails[], clas): CommitterMap {
-
+function prepareCommiterMap(
+  committers: CommittersDetails[],
+  clas
+): CommitterMap {
   let committerMap: CommitterMap = {}
 
   committerMap.notSigned = committers.filter(
-    committer => !clas.signedContributors.some(cla => committer.id === cla.id)
+    (committer) =>
+      !clas.signedContributors.some((cla) => committer.id === cla.id)
   )
-  committerMap.signed = committers.filter(committer =>
-    clas.signedContributors.some(cla => committer.id === cla.id)
+  committerMap.signed = committers.filter((committer) =>
+    clas.signedContributors.some((cla) => committer.id === cla.id)
   )
-  committers.map(committer => {
+  committers.map((committer) => {
     if (!committer.id) {
       committerMap.unknown!.push(committer)
     }
@@ -120,7 +162,13 @@ function prepareCommiterMap(committers: CommittersDetails[], clas): CommitterMap
   return committerMap
 }
 //TODO: refactor the commit message when a project admin does recheck PR
-async function updateFile(pathToClaSignatures, sha, contentBinary, branch, pullRequestNo) {
+async function updateFile(
+  pathToClaSignatures,
+  sha,
+  contentBinary,
+  branch,
+  pullRequestNo
+) {
   await octokit.repos.createOrUpdateFile({
     owner: context.repo.owner,
     repo: context.repo.repo,
@@ -128,19 +176,22 @@ async function updateFile(pathToClaSignatures, sha, contentBinary, branch, pullR
     sha: sha,
     message: `@${context.actor} has signed the CLA from Pull Request ${pullRequestNo}`,
     content: contentBinary,
-    branch: branch
+    branch: branch,
   })
 }
 
-function createFile(pathToClaSignatures, contentBinary, branch): Promise<object> {
+function createFile(
+  pathToClaSignatures,
+  contentBinary,
+  branch
+): Promise<object> {
   /* TODO: add dynamic message content  */
   return octokit.repos.createOrUpdateFile({
     owner: context.repo.owner,
     repo: context.repo.repo,
     path: pathToClaSignatures,
-    message:
-      'Creating file for storing CLA Signatures',
+    message: "Creating file for storing CLA Signatures",
     content: contentBinary,
-    branch: branch
+    branch: branch,
   })
 }
