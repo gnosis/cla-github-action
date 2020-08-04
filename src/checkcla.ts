@@ -13,7 +13,7 @@ import * as _ from "lodash"
 import * as core from "@actions/core"
 
 export async function getclas(pullRequestNo: number) {
-  let committerMap = {} as CommitterMap
+  let committerMap = { unknown: [] } as CommitterMap
 
   let signed: boolean = false
   //getting the path of the cla from the user
@@ -145,7 +145,7 @@ function prepareCommiterMap(
   committers: CommittersDetails[],
   clas
 ): CommitterMap {
-  let committerMap: CommitterMap = {}
+  let committerMap: CommitterMap = { unknown: [] }
 
   committerMap.notSigned = committers.filter(
     (committer) =>
